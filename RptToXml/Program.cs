@@ -16,13 +16,7 @@ namespace RptToXml
                 name: "input",
                 description:
                     "-r            Recursively convert all rpt files in current directory and sub directories." + Environment.NewLine +
-                    "RPT filename  Process a single RPT file." + Environment.NewLine +
-                    "wildcard      Process files in the current working directory matching the wildcard.");
-
-            var outputFilenameArg = new Argument<string>(
-                name: "outputfilename",
-                getDefaultValue: () => string.Empty,
-                description: "Write to a specific path. Valid only with single input filename in first argument.");
+                    "RPT filename  Process a single RPT file.");
 
             var ignoreErrorsOption = new Option<bool>(
                 name: "--ignore-errors",
@@ -39,15 +33,12 @@ namespace RptToXml
             int exitCode = 0;
             var command = new RootCommand("RPT2XML");
 			command.AddArgument(inputArg);
-			command.AddArgument(outputFilenameArg);
 			command.AddOption(ignoreErrorsOption);
 			command.AddOption(stdoutOption);
             command.SetHandler((
                     input,
-                    outputFilename,
                     ignoreErrors,
-                    stdout) => exitCode = Execute(input, outputFilename, ignoreErrors, stdout), inputArg,
-                outputFilenameArg,
+                    stdout) => exitCode = Execute(input, ignoreErrors, stdout), inputArg,
                 ignoreErrorsOption, stdoutOption);
 
             command.Invoke(args);
@@ -56,13 +47,10 @@ namespace RptToXml
 
         }
 
-        private static int Execute(
-            string input,
-            string outputFilename,
-            bool ignoreErrors,
-            bool stdOut)
+        private static int Execute(string input, bool ignoreErrors, bool stdOut)
         {
             List<string> rptPaths = FindRptPaths(input);
+            
             if (rptPaths.Count == 0)
             {
                 string errorMessage = input.Equals("-r", StringComparison.OrdinalIgnoreCase)
@@ -72,13 +60,16 @@ namespace RptToXml
                 return 1;
             }
 
-            if (rptPaths.Count > 1 && !string.IsNullOrEmpty(outputFilename))
+            int exitCode = 0;
+
+
+            string folderPath = @"XMLConverted";
+
+            if (!Directory.Exists(folderPath))
             {
-                Console.WriteLine($"outputfilename is only allowed with single input file.");
-                return 1;
+                Directory.CreateDirectory(folderPath);
             }
 
-            int exitCode = 0;
             Parallel.ForEach(
                 rptPaths,
                 stdOut ? new ParallelOptions { MaxDegreeOfParallelism = 1 } : new ParallelOptions(),
@@ -98,6 +89,8 @@ namespace RptToXml
                             Trace.WriteLine("Dumping " + rptPath);
                         }
 
+                        
+
                         using (var writer = new RptDefinitionWriter(rptPath, stdOut))
                         {
                             if (stdOut)
@@ -106,9 +99,8 @@ namespace RptToXml
                             }
                             else
                             {
-                                string xmlPath = string.IsNullOrEmpty(outputFilename)
-                                    ? Path.ChangeExtension(rptPath, "xml")
-                                    : outputFilename;
+                                string xmlPath = $"{folderPath}/{Path.ChangeExtension(rptPath, "xml")}";
+                                Trace.WriteLine("Saving in " + xmlPath);
                                 writer.WriteToXml(xmlPath);
                             }
                         }
@@ -129,8 +121,7 @@ namespace RptToXml
             return exitCode;
         }
 
-        private static List<string> FindRptPaths(
-            string input)
+        private static List<string> FindRptPaths(string input)
         {
             if (input.Equals("-r", StringComparison.OrdinalIgnoreCase))
             {
